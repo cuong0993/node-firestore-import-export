@@ -57,11 +57,7 @@ const unattendedConfirmation = commander.opts()[params.yesToImport.key];
   const str = new TextDecoder().decode(buffer);
   const data = JSON.parse(str);
   if (!unattendedConfirmation) {
-    const nodeLocation =
-      (<
-        | FirebaseFirestore.DocumentReference
-        | FirebaseFirestore.CollectionReference
-      >pathReference).path || '[database root]';
+    const nodeLocation = '[database root]';
     const projectID =
       process.env.FIRESTORE_EMULATOR_HOST ||
       (admin.apps[0]?.options.credential as any).projectId;
