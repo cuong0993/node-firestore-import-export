@@ -1,4 +1,4 @@
-import {Firestore} from '@google-cloud/firestore';
+import {DocumentData, DocumentReference, DocumentSnapshot, Firestore} from '@google-cloud/firestore';
 import {
   batchExecutor,
   isLikeDocument,
@@ -13,10 +13,11 @@ const exportData = async (
     | Firestore
     | FirebaseFirestore.DocumentReference
     | FirebaseFirestore.CollectionReference,
-  logs = false
+  options: any = {},
 ) => {
+  let {logs = false} = options;
   if (isLikeDocument(startingRef)) {
-    const collectionsPromise = () => getCollections(startingRef, logs);
+    const collectionsPromise = () => getCollections(startingRef, options);
     let dataPromise: () => Promise<any>;
     if (isRootOfDatabase(startingRef)) {
       dataPromise = () => Promise.resolve({});
@@ -33,25 +34,25 @@ const exportData = async (
   } else {
     return await getDocuments(
       <FirebaseFirestore.CollectionReference>startingRef,
-      logs
+      options
     );
   }
 };
 
 const getCollections = async (
   startingRef: Firestore | FirebaseFirestore.DocumentReference,
-  logs = false
+  options: any = {}
 ) => {
   const collectionNames: Array<string> = [];
   const collectionPromises: Array<() => Promise<any>> = [];
   const collectionsSnapshot = await safelyGetCollectionsSnapshot(
     startingRef,
-    logs
+    options
   );
   collectionsSnapshot.map(
     (collectionRef: FirebaseFirestore.CollectionReference) => {
       collectionNames.push(collectionRef.id);
-      collectionPromises.push(() => getDocuments(collectionRef, logs));
+      collectionPromises.push(() => getDocuments(collectionRef, options));
     }
   );
   const results = await batchExecutor(collectionPromises);
@@ -64,19 +65,20 @@ const getCollections = async (
 
 const getDocuments = async (
   collectionRef: FirebaseFirestore.CollectionReference,
-  logs = false
+  options: any = {}
 ) => {
+  const {logs = false, isDocAccepted = (doc: DocumentSnapshot) => true} = options;
   logs && console.log(`Retrieving documents from ${collectionRef.path}`);
   const results: any = {};
   const documentPromises: Array<() => Promise<object>> = [];
-  const allDocuments = await safelyGetDocumentReferences(collectionRef, logs);
-  allDocuments.forEach(doc => {
+  const allDocuments = await safelyGetDocumentReferences(collectionRef, options);
+  allDocuments.forEach((doc: DocumentReference) => {
     documentPromises.push(
       () =>
         new Promise(async resolve => {
           const docSnapshot = await doc.get();
           const docDetails: any = {};
-          if (docSnapshot.exists) {
+          if (docSnapshot.exists && isDocAccepted(docSnapshot)) {
             docDetails[docSnapshot.id] = serializeSpecialTypes(
               docSnapshot.data()
             );
@@ -87,7 +89,7 @@ const getDocuments = async (
           }
           docDetails[docSnapshot.id]['__collections__'] = await getCollections(
             docSnapshot.ref,
-            logs
+            options
           );
           resolve(docDetails);
         })

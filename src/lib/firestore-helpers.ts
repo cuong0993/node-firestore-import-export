@@ -1,4 +1,4 @@
-import {Firestore} from '@google-cloud/firestore';
+import {Firestore, Query} from '@google-cloud/firestore';
 
 const SLEEP_TIME = 1000;
 
@@ -87,15 +87,73 @@ const safelyGetCollectionsSnapshot = async (
   return collectionsSnapshot;
 };
 
+interface Clause {
+  field: string;
+  operation: FirebaseFirestore.WhereFilterOp;
+  value: any;
+}
+
+interface Options {
+  clauses?: Clause[];
+  pageSize?: number;
+  logs?: boolean;
+}
+
+async function getAllDocuments(
+  collectionRef: FirebaseFirestore.CollectionReference,
+  options: Options = {}
+) : Promise<FirebaseFirestore.DocumentSnapshot[]>{
+  const { clauses = [], pageSize = 500 } = options;
+
+  let lastDocument: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+  let moreDocumentsAvailable = true;
+  const allDocuments: FirebaseFirestore.DocumentSnapshot[] = [];
+
+  while (moreDocumentsAvailable) {
+    let query: Query = collectionRef;
+
+    // Apply all the clauses to the query if any
+    for (const clause of clauses) {
+      query = query.where(clause.field, clause.operation, clause.value);
+    }
+
+    // Apply pagination
+    query = query.limit(pageSize);
+    if (lastDocument) {
+      query = query.startAfter(lastDocument);
+    }
+
+    // Execute the query
+    const querySnapshot = await query.get();
+    const documents = querySnapshot.docs;
+
+    // Check if there are more documents available
+    if (documents.length < pageSize) {
+      moreDocumentsAvailable = false;
+    }
+
+    // If documents are found, add them to the allDocuments array and set the lastDocument for the next iteration
+    if (documents.length > 0) {
+      // allDocuments.push(...documents.map(doc => doc.ref));
+      allDocuments.push(...documents);
+      lastDocument = documents[documents.length - 1];
+    }
+  }
+
+  return allDocuments;
+}
+
 const safelyGetDocumentReferences = async (
   collectionRef: FirebaseFirestore.CollectionReference,
-  logs = false
+  options: Options = {}
 ): Promise<FirebaseFirestore.DocumentReference[]> => {
   let allDocuments,
     deadlineError = false;
+  let { logs = false } = options
   do {
     try {
-      allDocuments = await collectionRef.listDocuments();
+      allDocuments = await collectionRef.listDocuments(); //while it doesn't support "where" filters, it includes orphaned documents which are not available through getAllDocuments.
+      // allDocuments = await getAllDocuments(collectionRef, options);
       deadlineError = false;
     } catch (e: any) {
       if (e.code && e.code === 4) {

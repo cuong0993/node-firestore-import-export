@@ -6,7 +6,7 @@ import {
   safelyGetDocumentReferences,
 } from './firestore-helpers';
 import DocumentReference = FirebaseFirestore.DocumentReference;
-import {Firestore} from '@google-cloud/firestore';
+import {DocumentSnapshot, Firestore} from '@google-cloud/firestore';
 
 const clearData = async (
   startingRef:
@@ -48,10 +48,11 @@ const clearCollections = async (
 
 const clearDocuments = async (
   collectionRef: FirebaseFirestore.CollectionReference,
-  logs = false
+  logs = false,
+  options: any = {}
 ) => {
   logs && console.log(`Retrieving documents from ${collectionRef.path}`);
-  const allDocuments = await safelyGetDocumentReferences(collectionRef, logs);
+  const allDocuments = await safelyGetDocumentReferences(collectionRef, options);
   const documentPromises: Array<() => Promise<object>> = [];
   allDocuments.forEach((docRef: DocumentReference) => {
     documentPromises.push(() => clearCollections(docRef, logs));
