@@ -72,11 +72,22 @@ const getDocuments = async (
   const results: any = {};
   const documentPromises: Array<() => Promise<object>> = [];
   const allDocuments = await safelyGetDocumentReferences(collectionRef, options);
-  allDocuments.forEach((doc: DocumentReference) => {
+  allDocuments.forEach((doc: DocumentReference | DocumentSnapshot) => {
     documentPromises.push(
       () =>
         new Promise(async resolve => {
-          const docSnapshot = await doc.get();
+          let docSnapshot: DocumentSnapshot;
+
+          // console.log("doc.constructor.name2: ", doc.constructor.name);
+          // console.log("doc instanceof DocumentReference: ", doc instanceof DocumentReference);
+          // console.log("doc instanceof DocumentSnapshot: ", doc instanceof DocumentSnapshot);
+          //
+          if ('exists' in doc) {
+            docSnapshot = doc as DocumentSnapshot;
+          } else {
+            docSnapshot = await (doc as DocumentReference).get();
+          }
+
           const docDetails: any = {};
           if (docSnapshot.exists && isDocAccepted(docSnapshot)) {
             docDetails[docSnapshot.id] = serializeSpecialTypes(

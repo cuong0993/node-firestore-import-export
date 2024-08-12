@@ -54,9 +54,15 @@ const clearDocuments = async (
   logs && console.log(`Retrieving documents from ${collectionRef.path}`);
   const allDocuments = await safelyGetDocumentReferences(collectionRef, options);
   const documentPromises: Array<() => Promise<object>> = [];
-  allDocuments.forEach((docRef: DocumentReference) => {
-    documentPromises.push(() => clearCollections(docRef, logs));
-    documentPromises.push(() => docRef.delete());
+  allDocuments.forEach((doc: DocumentReference | DocumentSnapshot) => {
+    let ref: DocumentReference;
+    if ('delete' in doc && typeof doc['delete'] === 'function') {
+      ref = doc as DocumentReference
+    } else {
+      ref = (doc as DocumentSnapshot).ref;
+    }
+    documentPromises.push(() => clearCollections(ref, logs));
+    documentPromises.push(() => ref.delete());
   });
   return batchExecutor(documentPromises);
 };

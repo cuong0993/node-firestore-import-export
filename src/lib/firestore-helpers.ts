@@ -94,7 +94,8 @@ interface Clause {
 }
 
 interface Options {
-  clauses?: Clause[];
+  whereClauses?: Clause[];
+  wherePaths?: string[];
   pageSize?: number;
   logs?: boolean;
 }
@@ -103,7 +104,7 @@ async function getAllDocuments(
   collectionRef: FirebaseFirestore.CollectionReference,
   options: Options = {}
 ) : Promise<FirebaseFirestore.DocumentSnapshot[]>{
-  const { clauses = [], pageSize = 500 } = options;
+  const { whereClauses = [], pageSize = 500 } = options;
 
   let lastDocument: FirebaseFirestore.QueryDocumentSnapshot | null = null;
   let moreDocumentsAvailable = true;
@@ -113,7 +114,7 @@ async function getAllDocuments(
     let query: Query = collectionRef;
 
     // Apply all the clauses to the query if any
-    for (const clause of clauses) {
+    for (const clause of whereClauses) {
       query = query.where(clause.field, clause.operation, clause.value);
     }
 
@@ -146,14 +147,23 @@ async function getAllDocuments(
 const safelyGetDocumentReferences = async (
   collectionRef: FirebaseFirestore.CollectionReference,
   options: Options = {}
-): Promise<FirebaseFirestore.DocumentReference[]> => {
+): Promise<FirebaseFirestore.DocumentReference[] | FirebaseFirestore.DocumentSnapshot[]> => {
   let allDocuments,
     deadlineError = false;
-  let { logs = false } = options
+  let { logs = false, whereClauses = [], wherePaths = [] } = options
   do {
     try {
-      allDocuments = await collectionRef.listDocuments(); //while it doesn't support "where" filters, it includes orphaned documents which are not available through getAllDocuments.
-      // allDocuments = await getAllDocuments(collectionRef, options);
+      let path = collectionRef.path
+
+      let contains = checkIfArrayContainsPortionOfString(path, wherePaths)
+
+      if(contains && whereClauses.length > 0){
+        // console.log("safelyGetDocumentReferences: executing getAllDocuments for ", path)
+        allDocuments = await getAllDocuments(collectionRef, options); // orphaned documents are ignored here, so subcollections under nonexisting docs are not included.
+      } else {
+        // console.log("safelyGetDocumentReferences: executing listDocuments for ", path)
+        allDocuments = await collectionRef.listDocuments(); //while it doesn't support "where" filters, it includes orphaned documents which are not available through getAllDocuments.
+      }
       deadlineError = false;
     } catch (e: any) {
       if (e.code && e.code === 4) {
@@ -173,6 +183,15 @@ const safelyGetDocumentReferences = async (
   return allDocuments;
 };
 
+const checkIfArrayContainsPortionOfString = (str: string, arr: string[]) => {
+  for (let i = 0; i < arr.length; i++) {
+    if (str.includes(arr[i])) {
+      return true
+    }
+  }
+  return false
+}
+
 type anyFirebaseRef =
   | Firestore
   | FirebaseFirestore.DocumentReference
@@ -189,3 +208,5 @@ export {
   safelyGetCollectionsSnapshot,
   safelyGetDocumentReferences,
 };
+
+
